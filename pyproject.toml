@@ -1,0 +1,13 @@
+[project]
+name = "scoring-API"
+version = "0.1.0"
+description = "Scoring API"
+authors = [{name = "speculzzz", email = "speculzzz@gmail.com"}]
+dependencies = []
+requires-python = ">=3.11"
+readme = "README.md"
+license = { text = "MIT" }
+
+[tool.ruff]
+line-length = 120
+lint.select = ["E", "F", "I"]
