@@ -7,9 +7,11 @@ import json
 import logging
 import uuid
 from argparse import ArgumentParser
-from http.server import BaseHTTPRequestHandler, HTTPServer
-from pymemcache.client import base
 from functools import partial
+from http.server import BaseHTTPRequestHandler, HTTPServer
+
+from pymemcache.client import base as memcache_base
+from tenacity import retry, stop_after_attempt, wait_fixed
 
 import fields
 from scoring import get_interests, get_score
@@ -251,6 +253,49 @@ class MainHTTPHandler(BaseHTTPRequestHandler):
         return
 
 
+class ServerStore:
+    def __init__(self, server, port, retry_attempts=3, timeout=5):
+        self.server = server
+        self.port = port
+        self.timeout = timeout
+        self.memcache_client = self._create_memcache_client()
+
+        # Hack for passing retry_attempts into @retry
+        self._execute_with_retry = retry(
+            stop=stop_after_attempt(retry_attempts),
+            wait=wait_fixed(1)
+        )(self._execute_with_retry_impl)
+
+    def _create_memcache_client(self):
+        logging.info(f"Init Memcached at {self.port}")
+        return memcache_base.Client(
+            (self.server, self.port),
+            connect_timeout=self.timeout,
+            timeout=self.timeout,
+            no_delay=True
+        )
+
+    def _execute_with_retry_impl(self, func, *args, **kwargs):
+        try:
+            return func(*args, **kwargs)
+        except Exception as e:
+            logging.error(f"Store operation failed: {e}. Retrying...")
+            self.client = self._execute_with_retry()  # Reconnect
+            raise  # Retrying
+
+    def set_cache(self, key, value, ttl=None):
+        """Set to memcache with retrying"""
+        return self._execute_with_retry(self.memcache_client.set, key, value, expire=ttl)
+
+    def get_cache(self, key):
+        """Get from memcache with retrying"""
+        return self._execute_with_retry(self.memcache_client.get, key)
+
+    def delete_cache(self, key):
+        """Delete from memcache with retrying"""
+        return self._execute_with_retry(self.memcache_client.delete, key)
+
+
 if __name__ == "__main__":
     parser = ArgumentParser()
     parser.add_argument("-p", "--port", action="store", type=int, default=8080)
@@ -265,8 +310,7 @@ if __name__ == "__main__":
         datefmt="%Y.%m.%d %H:%M:%S",
     )
 
-    logging.info("Init Memcached at %s" % args.memcache_port)
-    store = base.Client(("localhost",  args.memcache_port))
+    store = ServerStore(server="localhost", port=args.memcache_port, retry_attempts=5)
 
     # "Partially apply" the store to the MainHTTPHandler
     handler = partial(MainHTTPHandler, store)

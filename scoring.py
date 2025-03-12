@@ -1,5 +1,5 @@
-import random
 import hashlib
+import random
 from datetime import datetime
 from typing import Optional
 
@@ -25,7 +25,7 @@ def get_score(
         key = "uid:" + hashlib.md5("".join(key_parts).encode('utf-8')).hexdigest()
 
         # Try to get from cache
-        score = store.get(key)
+        score = store.get_cache(key)
         if score is not None:
             return float(score)
 
@@ -42,7 +42,7 @@ def get_score(
 
     if store:
         # Cache the score for 60 minutes
-        store.set(key, score, 60 * 60)
+        store.set_cache(key, score, 60 * 60)
 
     return score
 
