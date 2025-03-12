@@ -8,6 +8,8 @@ import logging
 import uuid
 from argparse import ArgumentParser
 from http.server import BaseHTTPRequestHandler, HTTPServer
+from pymemcache.client import base
+from functools import partial
 
 import fields
 from scoring import get_interests, get_score
@@ -204,8 +206,12 @@ def method_handler(request, ctx, store):
 
 
 class MainHTTPHandler(BaseHTTPRequestHandler):
+
     router = {"method": method_handler}
-    store = None
+
+    def __init__(self, store, *args, **kwargs):
+        self.store = store
+        super().__init__(*args, **kwargs)
 
     def get_request_id(self, headers):
         return headers.get("HTTP_X_REQUEST_ID", uuid.uuid4().hex)
@@ -248,6 +254,7 @@ class MainHTTPHandler(BaseHTTPRequestHandler):
 if __name__ == "__main__":
     parser = ArgumentParser()
     parser.add_argument("-p", "--port", action="store", type=int, default=8080)
+    parser.add_argument("-m", "--memcache-port", action="store", type=int, default=11211)
     parser.add_argument("-l", "--log", action="store", default=None)
     args = parser.parse_args()
 
@@ -258,9 +265,14 @@ if __name__ == "__main__":
         datefmt="%Y.%m.%d %H:%M:%S",
     )
 
-    server = HTTPServer(("localhost", args.port), MainHTTPHandler)
+    logging.info("Init Memcached at %s" % args.memcache_port)
+    store = base.Client(("localhost",  args.memcache_port))
+
+    # "Partially apply" the store to the MainHTTPHandler
+    handler = partial(MainHTTPHandler, store)
 
     logging.info("Starting server at %s" % args.port)
+    server = HTTPServer(("localhost", args.port), handler)
     try:
         server.serve_forever()
     except KeyboardInterrupt:
