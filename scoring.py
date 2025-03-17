@@ -25,7 +25,7 @@ def get_score(
         key = "uid:" + hashlib.md5("".join(key_parts).encode('utf-8')).hexdigest()
 
         # Try to get from cache
-        score = store.get_cache(key)
+        score = store.cache_get(key)
         if score is not None:
             return float(score)
 
@@ -42,11 +42,20 @@ def get_score(
 
     if store:
         # Cache the score for 60 minutes
-        store.set_cache(key, score, 60 * 60)
+        store.cache_set(key, score, 60 * 60)
 
     return score
 
 
-def get_interests(store, cid):
+def get_interests(store, cid: int) -> list[str]:
     interests = ["cars", "pets", "travel", "hi-tech", "sport", "music", "books", "tv", "cinema", "geek", "otus"]
-    return random.sample(interests, 2)
+
+    key = f"i:{cid}"
+    data = store.get(key)
+    if data:
+        result = data.decode('utf-8').split('|')
+    else:
+        result = random.sample(interests, 2)
+        store.set(key, '|'.join(result))
+
+    return result

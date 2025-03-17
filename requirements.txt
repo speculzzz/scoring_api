@@ -1,2 +1,3 @@
 pymemcache
+redis
 tenacity
