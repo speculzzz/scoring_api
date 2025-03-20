@@ -1,3 +1,6 @@
 pymemcache
+pytest
+pytest-cov
+pytest-mock
 redis
 tenacity

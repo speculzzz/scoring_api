@@ -3,7 +3,7 @@ name = "scoring-API"
 version = "0.1.0"
 description = "Scoring API"
 authors = [{name = "speculzzz", email = "speculzzz@gmail.com"}]
-dependencies = ["pymemcache", "redis", "tenacity"]
+dependencies = ["pymemcache", "pytest", "pytest-cov", "pytest-mock", "redis", "tenacity"]
 requires-python = ">=3.11"
 readme = "README.md"
 license = { text = "MIT" }
