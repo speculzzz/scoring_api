@@ -1,11 +1,12 @@
 import hashlib
-import random
 from datetime import datetime
 from typing import Optional
 
+from store import Store
+
 
 def get_score(
-        store,
+        store: Store,
         phone: Optional[str] = None,
         email: Optional[str] = None,
         birthday: Optional[datetime] = None,
@@ -25,9 +26,13 @@ def get_score(
         key = "uid:" + hashlib.md5("".join(key_parts).encode('utf-8')).hexdigest()
 
         # Try to get from cache
-        score = store.cache_get(key)
-        if score is not None:
-            return float(score)
+        try:
+            score = store.cache_get(key)
+            if score is not None:
+                return float(score)
+        except Exception:
+            # The issues with the memcache is uncritical to the function
+            pass
 
     # Calculate score
     score = 0.0
@@ -41,21 +46,15 @@ def get_score(
         score += 0.5
 
     if store:
-        # Cache the score for 60 minutes
-        store.cache_set(key, score, 60 * 60)
+        try:
+            # Cache the score for 60 minutes
+            store.cache_set(key, score, 60 * 60)
+        except Exception:
+            pass
 
     return score
 
 
-def get_interests(store, cid: int) -> list[str]:
-    interests = ["cars", "pets", "travel", "hi-tech", "sport", "music", "books", "tv", "cinema", "geek", "otus"]
-
-    key = f"i:{cid}"
-    data = store.get(key)
-    if data:
-        result = data.decode('utf-8').split('|')
-    else:
-        result = random.sample(interests, 2)
-        store.set(key, '|'.join(result))
-
-    return result
+def get_interests(store: Store, cid: int) -> list:
+    data = store.get(f"i:{cid}")
+    return data if data is not None else []
