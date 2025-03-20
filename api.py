@@ -5,17 +5,14 @@ import datetime
 import hashlib
 import json
 import logging
-import redis
 import uuid
 from argparse import ArgumentParser
 from functools import partial
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
-from pymemcache.client import base as memcache_base
-from tenacity import retry, stop_after_attempt, wait_fixed
-
 import fields
 from scoring import get_interests, get_score
+from store import ServerStore, DEFAULT_REDIS_PORT, DEFAULT_MEMCACHED_PORT
 
 SALT = "Otus"
 ADMIN_LOGIN = "admin"
@@ -254,83 +251,11 @@ class MainHTTPHandler(BaseHTTPRequestHandler):
         return
 
 
-class ServerStore:
-    OPERATION_MEMCACHE = 0
-    OPERATION_REDIS = 1
-
-    def __init__(self, server, memcache_port, redis_port, retry_attempts=3, timeout=5):
-        self.server = server
-        self.memcache_port = memcache_port
-        self.redis_port = redis_port
-        self.timeout = timeout
-        self.memcache_client = self._create_memcache_client()
-        self.redis_client = self._create_redis_client()
-
-        # Hack for passing retry_attempts into @retry
-        self._execute_with_retry = retry(
-            stop=stop_after_attempt(retry_attempts),
-            wait=wait_fixed(1)
-        )(self._execute_with_retry_impl)
-
-    def _create_memcache_client(self):
-        logging.info(f"Init Memcached at {self.memcache_port}")
-        return memcache_base.Client(
-            (self.server, self.memcache_port),
-            connect_timeout=self.timeout,
-            timeout=self.timeout,
-            no_delay=True
-        )
-
-    def _create_redis_client(self):
-        logging.info(f"Init Redis at {self.redis_port}")
-        return redis.Redis(
-            host=self.server,
-            port=self.redis_port,
-            socket_timeout=self.timeout,
-            socket_connect_timeout=self.timeout
-        )
-
-    def _execute_with_retry_impl(self, operation, func, *args, **kwargs):
-        try:
-            return func(*args, **kwargs)
-        except Exception as e:
-            logging.error(f"Store operation failed: {e}. Retrying...")
-            if operation == self.OPERATION_MEMCACHE:
-                self.memcache_client = self._create_memcache_client()  # Reconnect
-            elif operation == self.OPERATION_REDIS:
-                self.redis_client = self._create_redis_client()  # Reconnect
-            raise  # Retrying
-
-    def cache_set(self, key, value, ttl=None):
-        """Set to memcache with retrying"""
-        return self._execute_with_retry(self.OPERATION_MEMCACHE, self.memcache_client.set, key, value, expire=ttl)
-
-    def cache_get(self, key):
-        """Get from memcache with retrying"""
-        return self._execute_with_retry(self.OPERATION_MEMCACHE, self.memcache_client.get, key)
-
-    def cache_delete(self, key):
-        """Delete from memcache with retrying"""
-        return self._execute_with_retry(self.OPERATION_MEMCACHE, self.memcache_client.delete, key)
-
-    def set(self, key, value):
-        """Set to redis with retrying"""
-        return self._execute_with_retry(self.OPERATION_REDIS, self.redis_client.set, key, value)
-
-    def get(self, key):
-        """Get from redis with retrying"""
-        return self._execute_with_retry(self.OPERATION_REDIS, self.redis_client.get, key)
-
-    def delete(self, key):
-        """Delete from redis with retrying"""
-        return self._execute_with_retry(self.OPERATION_REDIS, self.redis_client.delete, key)
-
-
 if __name__ == "__main__":
     parser = ArgumentParser()
     parser.add_argument("-p", "--port", action="store", type=int, default=8080)
-    parser.add_argument("-m", "--memcache-port", action="store", type=int, default=11211)
-    parser.add_argument("-r", "--redis-port", action="store", type=int, default=6379)
+    parser.add_argument("-m", "--memcache-port", action="store", type=int, default=DEFAULT_MEMCACHED_PORT)
+    parser.add_argument("-r", "--redis-port", action="store", type=int, default=DEFAULT_REDIS_PORT)
     parser.add_argument("-l", "--log", action="store", default=None)
     args = parser.parse_args()
 
@@ -342,10 +267,9 @@ if __name__ == "__main__":
     )
 
     store = ServerStore(
-        server="localhost",
         memcache_port=args.memcache_port,
         redis_port=args.redis_port,
-        retry_attempts=5
+        logger=logging
     )
 
     # "Partially apply" the store to the MainHTTPHandler
