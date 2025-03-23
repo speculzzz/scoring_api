@@ -1,3 +1,4 @@
+import hashlib
 import pytest
 from redis import Redis
 from pymemcache.client.base import Client
@@ -45,3 +46,10 @@ def print_logger():
 @pytest.fixture
 def mock_server_store(mock_memcached, mock_redis, print_logger):
     return ServerStore(logger=print_logger)
+
+# Fixture to mock uid hash
+@pytest.fixture
+def mock_uid_hash(mocker):
+    mock_hash = mocker.Mock()
+    mocker.patch("hashlib.md5", return_value=mock_hash)
+    return mock_hash
