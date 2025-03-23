@@ -10,7 +10,7 @@ def test_set_success(mock_memcached):
     wrapper.set("key1", 3.14)
 
     # Verify that set was called with the correct arguments
-    mock_memcached.set.assert_called_once_with("key1", "3.14")
+    mock_memcached.set.assert_called_once_with("key1", "3.14", expire=0)
 
 # Test successful get operation
 def test_get_success(mock_memcached):

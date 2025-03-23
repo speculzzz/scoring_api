@@ -15,7 +15,7 @@ def mock_redis(mocker):
 @pytest.fixture
 def mock_memcached(mocker):
     mock_client = mocker.Mock(spec=Client)
-    mocker.patch("pymemcache.client.base.Client", return_value=mock_client)
+    mocker.patch("store.Client", return_value=mock_client)
     return mock_client
 
 
